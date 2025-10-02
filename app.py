@@ -34,7 +34,7 @@ def fmt_num(val):
         return "0"
 
 # --- generate voucher ---
-def buat_voucher(df, no_voucher, settings, pejabat_names):
+def buat_voucher(df, no_voucher, settings, pejabat):
     pdf = FPDF("P", "mm", "A4")
     pdf.set_left_margin(15)
     pdf.set_right_margin(15)
@@ -42,7 +42,7 @@ def buat_voucher(df, no_voucher, settings, pejabat_names):
 
     # Header kiri (logo + perusahaan + alamat)
     if settings.get("logo"):
-        pdf.image(settings["logo"], 15, 8, settings.get("logo_size", 20))
+        pdf.image(settings["logo"], 15, 10, settings.get("logo_size", 20))
 
     pdf.set_font("Arial", "B", 12)
     pdf.set_xy(40, 10)
@@ -51,16 +51,16 @@ def buat_voucher(df, no_voucher, settings, pejabat_names):
     pdf.set_x(40)
     pdf.multi_cell(60, 5, settings.get("alamat",""), align="L")
 
-    # Header kanan
+    # Header kanan (judul dalam garis)
     judul = settings.get("judul_dokumen", "Jurnal Voucher")
-    pdf.set_xy(120, 10)
+    header_x = 120
+    pdf.set_xy(header_x, 10)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(80, 6, judul, align="R")
-    pdf.ln(2)
     pdf.set_draw_color(0,0,0)
     pdf.set_line_width(0.6)
-    pdf.line(120, 15, 200, 15)
-    pdf.line(120, 22, 200, 22)
+    pdf.line(header_x, 15, 200, 15)
+    pdf.line(header_x, 22, 200, 22)
 
     # Info voucher
     data = df[df["Nomor Voucher Jurnal"] == no_voucher]
@@ -70,24 +70,23 @@ def buat_voucher(df, no_voucher, settings, pejabat_names):
         tgl = str(data.iloc[0]["Tanggal"])
     subjek_val = str(data.iloc[0].get("Subjek",""))
 
-    pdf.set_xy(120, 25)
+    pdf.set_xy(header_x, 25)
     pdf.set_font("Arial", "", 10)
     pdf.cell(30, 6, "Nomor Voucher", align="L")
     pdf.cell(50, 6, f": {no_voucher}", ln=1)
 
-    pdf.set_x(120)
+    pdf.set_x(header_x)
     pdf.cell(30, 6, "Tanggal", align="L")
     pdf.cell(50, 6, f": {tgl}", ln=1)
 
-    pdf.set_x(120)
+    pdf.set_x(header_x)
     pdf.cell(30, 6, settings.get("label_subjek","Subjek"), align="L")
     pdf.cell(50, 6, f": {subjek_val}", ln=1)
-
     pdf.ln(5)
 
-    # tabel utama
+    # Tabel utama
     total_width = pdf.w - pdf.l_margin - pdf.r_margin
-    base_col_widths = [30, 50, 55, 30, 30]  # lebih lebar untuk Akun
+    base_col_widths = [25, 55, 55, 30, 30]
     scale = total_width / sum(base_col_widths)
     col_widths = [w*scale for w in base_col_widths]
     headers = ["Akun Perkiraan","Nama Akun","Memo","Debit","Kredit"]
@@ -119,7 +118,6 @@ def buat_voucher(df, no_voucher, settings, pejabat_names):
             fmt_num(kredit_val)
         ]
 
-        # cek line wrap
         line_counts = []
         for i2, (val, w) in enumerate(zip(values, col_widths)):
             if i2 in [3,4]:
@@ -152,23 +150,25 @@ def buat_voucher(df, no_voucher, settings, pejabat_names):
     pdf.cell(sum(col_widths[:-2]),8,"Total",border=1,align="R")
     pdf.cell(col_widths[3],8,fmt_num(total_debit),border=1,align="R")
     pdf.cell(col_widths[4],8,fmt_num(total_kredit),border=1,align="R")
-    pdf.ln(10)
+    pdf.ln()
 
-    # --- TERBILANG ---
+    # --- TERBILANG (tanpa koma nol) ---
     terbilang = num2words(total_debit, lang='id')
     terbilang = " ".join([w.capitalize() for w in terbilang.split()])
-    terbilang = terbilang.replace("Koma Nol", "")  # hapus koma nol
+    if "koma Nol" in terbilang:
+        terbilang = terbilang.replace("koma Nol", "")
     pdf.set_font("Arial", "I", 9)
     pdf.cell(total_width, 8, f"Terbilang : {terbilang} Rupiah", border=1, align="L")
-    pdf.ln(12)
+    pdf.ln(10)
 
     # --- KETERANGAN & TTD ---
-    block_height = 35
+    block_height = 40
     ket_width = total_width * 0.4
     ttd_width = total_width * 0.6
+
     y_start = pdf.get_y()
 
-    # Keterangan box
+    # Keterangan
     pdf.set_font("Arial", "", 9)
     pdf.rect(pdf.l_margin, y_start, ket_width, block_height)
     pdf.set_xy(pdf.l_margin + 2, y_start + 2)
@@ -176,35 +176,32 @@ def buat_voucher(df, no_voucher, settings, pejabat_names):
     if first_desc:
         pdf.set_x(pdf.l_margin + 2)
         pdf.multi_cell(ket_width - 4, 6, str(first_desc))
-    # garis putus-putus
+    # garis putus-putus bawah
     y_dashed = y_start + block_height - 5
     pdf.dashed_line(pdf.l_margin + 2, y_dashed, pdf.l_margin + ket_width - 2, y_dashed, 1, 2)
 
-    # Filter pejabat valid
-    pejabat_valid = [p for p in pejabat_names if p.get("jabatan") or p.get("nama")]
+    # TTD box
+    pdf.set_xy(pdf.l_margin + ket_width + 5, y_start)
+    col_width = (ttd_width - 5) / len(pejabat)
 
-    if pejabat_valid:
-        pdf.set_xy(pdf.l_margin + ket_width + 5, y_start)
-        col_width = (ttd_width - 5) / len(pejabat_valid)
+    # Header jabatan
+    pdf.set_font("Arial", "B", 9)
+    for jabatan, _ in pejabat:
+        pdf.cell(col_width, 8, jabatan if jabatan else "", border=1, align="C")
+    pdf.ln()
 
-        # Baris jabatan
-        pdf.set_font("Arial", "B", 9)
-        for p in pejabat_valid:
-            pdf.cell(col_width, 8, p.get("jabatan",""), border=1, align="C")
-        pdf.ln()
+    # Kotak tanda tangan
+    pdf.set_x(pdf.l_margin + ket_width + 5)
+    for _ in pejabat:
+        pdf.cell(col_width, block_height-16, "", border=1, align="C")
+    pdf.ln()
 
-        # Baris tanda tangan kosong
-        pdf.set_x(pdf.l_margin + ket_width + 5)
-        for _ in pejabat_valid:
-            pdf.cell(col_width, 25, "", border=1, align="C")
-        pdf.ln()
-
-        # Baris nama pejabat
-        pdf.set_x(pdf.l_margin + ket_width + 5)
-        pdf.set_font("Arial", "", 9)
-        for p in pejabat_valid:
-            pdf.cell(col_width, 8, p.get("nama",""), border=1, align="C")
-        pdf.ln(15)
+    # Nama pejabat
+    pdf.set_x(pdf.l_margin + ket_width + 5)
+    pdf.set_font("Arial", "", 9)
+    for _, nama in pejabat:
+        pdf.cell(col_width, 8, nama if nama else "", border=1, align="C")
+    pdf.ln(15)
 
     buffer = BytesIO()
     pdf.output(buffer)
@@ -229,13 +226,13 @@ if logo_file:
     tmp = BytesIO(logo_file.read())
     settings["logo"] = tmp
 
-# Input pejabat
 st.sidebar.subheader("Kolom Tanda Tangan (max 3)")
-pejabat_names = []
+pejabat = []
 for i in range(1,4):
-    jab = st.sidebar.text_input(f"Jabatan {i}", "")
+    jabatan = st.sidebar.text_input(f"Jabatan {i}", "")
     nama = st.sidebar.text_input(f"Nama Pejabat {i}", "")
-    pejabat_names.append({"jabatan": jab, "nama": nama})
+    if jabatan or nama:
+        pejabat.append((jabatan, nama))
 
 # Main content
 file = st.file_uploader("Upload Jurnal (Excel)", type=["xlsx","xls"])
@@ -249,7 +246,7 @@ if file:
     if mode == "Single Voucher":
         no_voucher = st.selectbox("Pilih Nomor Voucher", df["Nomor Voucher Jurnal"].unique())
         if st.button("Cetak"):
-            pdf_file = buat_voucher(df, no_voucher, settings, pejabat_names)
+            pdf_file = buat_voucher(df, no_voucher, settings, pejabat)
             st.download_button("⬇️ Download PDF", data=pdf_file, file_name=f"{no_voucher}.pdf")
 
     else:
@@ -261,7 +258,7 @@ if file:
             buffer_zip = BytesIO()
             with zipfile.ZipFile(buffer_zip, "w") as zf:
                 for v in df[df["Tanggal"].dt.month==bulan]["Nomor Voucher Jurnal"].unique():
-                    pdf_file = buat_voucher(df, v, settings, pejabat_names)
+                    pdf_file = buat_voucher(df, v, settings, pejabat)
                     zf.writestr(f"{v}.pdf", pdf_file.getvalue())
             buffer_zip.seek(0)
             st.download_button("⬇️ Download ZIP", data=buffer_zip, file_name=f"voucher_{bulan}.zip", mime="application/zip")
