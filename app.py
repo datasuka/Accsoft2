@@ -16,12 +16,21 @@ def bersihkan_jurnal(df):
         "akun": "Akun",
         "deskripsi": "Deskripsi",
         "debet": "Debet",
-        "kredit": "Kredit"
+        "kredit": "Kredit",
+        "departemen": "Departemen",
+        "proyek": "Proyek"
     }
     df = df.rename(columns={k.lower(): v for k,v in mapping.items() if k.lower() in df.columns})
-    df["Debet"] = pd.to_numeric(df.get("Debet", 0), errors="coerce").fillna(0)
-    df["Kredit"] = pd.to_numeric(df.get("Kredit", 0), errors="coerce").fillna(0)
+    for col in ["Debet","Kredit"]:
+        df[col] = pd.to_numeric(df.get(col,0), errors="coerce").fillna(0)
     return df
+
+# format angka
+def fmt_num(val):
+    try:
+        return f"{int(val):,}".replace(",", ".")
+    except:
+        return "0"
 
 # --- generate voucher ---
 def buat_voucher(df, no_voucher, settings, jenis_doc):
@@ -30,18 +39,18 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf.set_right_margin(15)
     pdf.add_page()
 
-    # Header perusahaan (logo kiri, info kanan)
+    # Header kiri
     if settings.get("logo"):
         pdf.image(settings["logo"], 15, 8, settings.get("logo_size", 20))
 
     pdf.set_font("Arial", "B", 12)
     pdf.set_xy(40, 10)
-    pdf.multi_cell(80, 6, settings.get("perusahaan",""))
+    pdf.multi_cell(100, 6, settings.get("perusahaan",""))
     pdf.set_font("Arial", "", 9)
     pdf.set_x(40)
-    pdf.multi_cell(80, 5, settings.get("alamat",""))
+    pdf.multi_cell(100, 5, settings.get("alamat",""))
 
-    # header kanan
+    # Header kanan
     pdf.set_xy(140, 10)
     pdf.set_font("Arial", "B", 12)
     if jenis_doc == "Jurnal Umum":
@@ -54,7 +63,6 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 6, f"Nomor Voucher : {no_voucher}", ln=1, align="R")
 
-    # ambil data voucher
     data = df[df["Nomor Voucher Jurnal"] == no_voucher]
     try:
         tgl = pd.to_datetime(data.iloc[0]["Tanggal"]).strftime("%d %b %Y")
@@ -70,8 +78,8 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf.ln(3)
 
     # table header
-    col_widths = [28, 60, 60, 25, 25]
-    headers = ["Akun Perkiraan","Nama Akun","Memo","Debit","Kredit"]
+    col_widths = [25, 45, 30, 30, 40, 25, 25]
+    headers = ["Akun Perkiraan","Nama Akun","Departemen","Proyek","Memo","Debit","Kredit"]
 
     pdf.set_font("Arial","B",9)
     for h,w in zip(headers,col_widths):
@@ -82,22 +90,24 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf.set_font("Arial","",9)
 
     first_desc = ""
-    for i, row in data.iterrows():
-        debit_val = int(row["Debet"]) if pd.notna(row["Debet"]) else 0
-        kredit_val = int(row["Kredit"]) if pd.notna(row["Kredit"]) else 0
+    for _, row in data.iterrows():
+        debit_val = row["Debet"]
+        kredit_val = row["Kredit"]
 
         values = [
-            str(row["No Akun"]),
-            str(row["Akun"]),
+            str(row.get("No Akun","")),
+            str(row.get("Akun","")),
+            str(row.get("Departemen","")),
+            str(row.get("Proyek","")),
             str(row.get("Deskripsi","")),
-            f"{debit_val:,}".replace(",", "."),
-            f"{kredit_val:,}".replace(",", ".")
+            fmt_num(debit_val),
+            fmt_num(kredit_val)
         ]
 
         # tinggi baris wrap
         line_counts = []
         for i2, (val, w) in enumerate(zip(values, col_widths)):
-            if i2 in [3,4]:
+            if i2 in [5,6]:
                 line_counts.append(1)
             else:
                 lines = pdf.multi_cell(w, 6, val, split_only=True)
@@ -111,7 +121,7 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
             pdf.rect(x_start, y_start, w, row_height)
             pdf.set_xy(x_start, y_start)
 
-            if i2 in [3,4]:
+            if i2 in [5,6]:
                 pdf.cell(w, row_height, val, align="R")
             else:
                 pdf.multi_cell(w, 6, val, align="L")
@@ -127,40 +137,37 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     # total row
     pdf.set_font("Arial","B",9)
     pdf.cell(sum(col_widths[:-2]),8,"Total",border=1,align="R")
-    pdf.cell(col_widths[3],8,f"{total_debit:,}".replace(",", "."),border=1,align="R")
-    pdf.cell(col_widths[4],8,f"{total_kredit:,}".replace(",", "."),border=1,align="R")
+    pdf.cell(col_widths[5],8,fmt_num(total_debit),border=1,align="R")
+    pdf.cell(col_widths[6],8,fmt_num(total_kredit),border=1,align="R")
     pdf.ln()
 
-    # Terbilang row (kapital tiap kata)
+    # Terbilang row
     terbilang = num2words(total_debit, lang='id')
     terbilang = " ".join([w.capitalize() for w in terbilang.split()])
     pdf.set_font("Arial","I",9)
     pdf.cell(sum(col_widths),8,f"Terbilang : {terbilang} Rupiah",border=1,align="L")
     pdf.ln()
 
-    # Keterangan (pakai deskripsi)
+    # Keterangan
     if first_desc:
         pdf.set_font("Arial","",9)
         pdf.cell(sum(col_widths),8,f"Keterangan : {first_desc}",border=1,align="L")
         pdf.ln()
 
-    # tanda tangan
+    # tanda tangan table
     pdf.ln(10)
     pdf.set_font("Arial","",10)
-
-    if jenis_doc == "Jurnal Umum":
-        ttd_labels = ["Finance","Disetujui","Penerima"]
-    elif jenis_doc == "Bukti Pengeluaran Kas/Bank":
-        ttd_labels = ["Finance","Disetujui","Penerima"]
-    else:
+    if jenis_doc == "Bukti Penerimaan Kas/Bank":
         ttd_labels = ["Finance","Disetujui","Pemberi"]
+    else:
+        ttd_labels = ["Finance","Disetujui","Penerima"]
 
     col_width = (pdf.w - pdf.l_margin - pdf.r_margin) / len(ttd_labels)
-    for label in ttd_labels:
-        pdf.cell(col_width,6,label,align="C",border=1)
+    for lbl in ttd_labels:
+        pdf.cell(col_width,10,lbl,align="C",border=1)
     pdf.ln(20)
-    for label in ttd_labels:
-        pdf.cell(col_width,6,"(................)",align="C",border=1)
+    for _ in ttd_labels:
+        pdf.cell(col_width,10,"(.................)",align="C",border=1)
     pdf.ln(10)
 
     buffer = BytesIO()
