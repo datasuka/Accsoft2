@@ -45,12 +45,12 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
 
     pdf.set_font("Arial", "B", 12)
     pdf.set_xy(40, 10)
-    pdf.multi_cell(85, 6, settings.get("perusahaan",""))
+    pdf.multi_cell(75, 6, settings.get("perusahaan",""))   # max width 75
     pdf.set_font("Arial", "", 9)
     pdf.set_x(40)
-    pdf.multi_cell(85, 5, settings.get("alamat",""), align="L")
+    pdf.multi_cell(75, 5, settings.get("alamat",""), align="L")  # max width 75
 
-    # Header kanan: judul + info kotak
+    # Header kanan: judul + info
     judul = "Jurnal Voucher" if jenis_doc=="Jurnal Umum" else ("Bukti Pengeluaran Kas/Bank" if jenis_doc=="Bukti Pengeluaran Kas/Bank" else "Bukti Penerimaan Kas/Bank")
     header_width = 90
     header_x = pdf.w - pdf.r_margin - header_width
@@ -64,26 +64,12 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf.line(header_x, 10, pdf.w - pdf.r_margin, 10)
     pdf.line(header_x, 20, pdf.w - pdf.r_margin, 20)
 
-    # Kotak info
-    label_w = 35
-    value_w = header_width - label_w
-    pdf.set_font("Arial", "", 10)
-
+    # Data voucher
     data = df[df["Nomor Voucher Jurnal"] == no_voucher]
     try:
         tgl = pd.to_datetime(data.iloc[0]["Tanggal"]).strftime("%d %b %Y")
     except:
         tgl = str(data.iloc[0]["Tanggal"])
-
-    # Nomor Voucher
-    pdf.set_xy(header_x, 22)
-    pdf.cell(label_w, 7, "Nomor Voucher :", border=1)
-    pdf.multi_cell(value_w, 7, no_voucher, border=1)
-
-    # Tanggal
-    pdf.set_x(header_x)
-    pdf.cell(label_w, 7, "Tanggal :", border=1)
-    pdf.multi_cell(value_w, 7, tgl, border=1)
 
     # Subjek/Penerima/Pemberi
     if jenis_doc == "Jurnal Umum":
@@ -93,9 +79,19 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     else:
         subjek_label = "Pemberi"
 
+    # Info voucher tanpa border
+    pdf.set_xy(header_x, 25)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(35, 7, "Nomor Voucher :", border=0)
+    pdf.multi_cell(header_width-35, 7, no_voucher, border=0)
+
     pdf.set_x(header_x)
-    pdf.cell(label_w, 7, f"{subjek_label} :", border=1)
-    pdf.multi_cell(value_w, 7, "", border=1)
+    pdf.cell(35, 7, "Tanggal :", border=0)
+    pdf.multi_cell(header_width-35, 7, tgl, border=0)
+
+    pdf.set_x(header_x)
+    pdf.cell(35, 7, f"{subjek_label} :", border=0)
+    pdf.multi_cell(header_width-35, 7, "", border=0)
 
     pdf.ln(5)
 
