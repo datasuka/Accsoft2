@@ -51,16 +51,18 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     pdf.set_x(40)
     pdf.multi_cell(60, 5, settings.get("alamat",""), align="L")
 
-    # Header kanan (judul dalam garis)
+    # Header kanan (judul di dalam garis)
     judul = settings.get("judul_dokumen", "Jurnal Voucher")
     header_x = 120
-    pdf.set_xy(header_x, 10)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(80, 6, judul, align="R")
+
     pdf.set_draw_color(0,0,0)
     pdf.set_line_width(0.6)
-    pdf.line(header_x, 15, 200, 15)
-    pdf.line(header_x, 22, 200, 22)
+    pdf.line(header_x, 10, 200, 10)   # garis atas
+    pdf.line(header_x, 20, 200, 20)   # garis bawah
+
+    pdf.set_xy(header_x, 12)
+    pdf.cell(80, 6, judul, align="C")
 
     # Info voucher
     data = df[df["Nomor Voucher Jurnal"] == no_voucher]
@@ -155,8 +157,8 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     # --- TERBILANG (tanpa koma nol) ---
     terbilang = num2words(total_debit, lang='id')
     terbilang = " ".join([w.capitalize() for w in terbilang.split()])
-    if "koma Nol" in terbilang:
-        terbilang = terbilang.replace("koma Nol", "")
+    if "Koma Nol" in terbilang:
+        terbilang = terbilang.replace("Koma Nol", "")
     pdf.set_font("Arial", "I", 9)
     pdf.cell(total_width, 8, f"Terbilang : {terbilang} Rupiah", border=1, align="L")
     pdf.ln(10)
@@ -165,7 +167,6 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     block_height = 40
     ket_width = total_width * 0.4
     ttd_width = total_width * 0.6
-
     y_start = pdf.get_y()
 
     # Keterangan
@@ -180,23 +181,20 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     y_dashed = y_start + block_height - 5
     pdf.dashed_line(pdf.l_margin + 2, y_dashed, pdf.l_margin + ket_width - 2, y_dashed, 1, 2)
 
-    # TTD box
+    # TTD
     pdf.set_xy(pdf.l_margin + ket_width + 5, y_start)
     col_width = (ttd_width - 5) / len(pejabat)
 
-    # Header jabatan
     pdf.set_font("Arial", "B", 9)
     for jabatan, _ in pejabat:
         pdf.cell(col_width, 8, jabatan if jabatan else "", border=1, align="C")
     pdf.ln()
 
-    # Kotak tanda tangan
     pdf.set_x(pdf.l_margin + ket_width + 5)
     for _ in pejabat:
         pdf.cell(col_width, block_height-16, "", border=1, align="C")
     pdf.ln()
 
-    # Nama pejabat
     pdf.set_x(pdf.l_margin + ket_width + 5)
     pdf.set_font("Arial", "", 9)
     for _, nama in pejabat:
@@ -206,7 +204,6 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     buffer = BytesIO()
     pdf.output(buffer)
     return buffer
-
 
 # --- Streamlit ---
 st.set_page_config(page_title="Mini Akunting", layout="wide")
