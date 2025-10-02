@@ -36,7 +36,7 @@ def fmt_num(val):
 def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf = FPDF("P", "mm", "A4")
     pdf.set_left_margin(15)
-    pdf.set_right_margin(15)
+    pdf.set_right_margin(15)   # margin kanan fix
     pdf.add_page()
 
     # Header kiri (logo + perusahaan + alamat)
@@ -50,11 +50,12 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf.set_x(40)
     pdf.multi_cell(80, 5, settings.get("alamat",""), align="L")
 
-    # Header kanan dalam kotak
-    pdf.set_xy(140, 10)
+    # Header kanan dalam kotak dinamis
     judul = "Jurnal Voucher" if jenis_doc=="Jurnal Umum" else ("Bukti Pengeluaran Kas/Bank" if jenis_doc=="Bukti Pengeluaran Kas/Bank" else "Bukti Penerimaan Kas/Bank")
+    header_width = 70
+    pdf.set_xy(pdf.w - pdf.r_margin - header_width, 10)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(60, 8, judul, border=1, align="C", ln=1)
+    pdf.cell(header_width, 8, judul, border=1, align="C", ln=1)
 
     data = df[df["Nomor Voucher Jurnal"] == no_voucher]
     try:
@@ -63,21 +64,24 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
         tgl = str(data.iloc[0]["Tanggal"])
 
     pdf.set_font("Arial", "", 10)
-    pdf.cell(30, 6, "Nomor Voucher", border=1)
-    pdf.cell(30, 6, no_voucher, border=1, ln=1, align="R")
-    pdf.cell(30, 6, "Tanggal", border=1)
-    pdf.cell(30, 6, tgl, border=1, ln=1, align="R")
+    pdf.cell(header_width/2, 6, "Nomor Voucher", border=1)
+    pdf.cell(header_width/2, 6, no_voucher, border=1, ln=1, align="R")
+    pdf.cell(header_width/2, 6, "Tanggal", border=1)
+    pdf.cell(header_width/2, 6, tgl, border=1, ln=1, align="R")
     if jenis_doc == "Bukti Pengeluaran Kas/Bank":
-        pdf.cell(30, 6, "Penerima", border=1)
-        pdf.cell(30, 6, "", border=1, ln=1)
+        pdf.cell(header_width/2, 6, "Penerima", border=1)
+        pdf.cell(header_width/2, 6, "", border=1, ln=1)
     elif jenis_doc == "Bukti Penerimaan Kas/Bank":
-        pdf.cell(30, 6, "Pemberi", border=1)
-        pdf.cell(30, 6, "", border=1, ln=1)
+        pdf.cell(header_width/2, 6, "Pemberi", border=1)
+        pdf.cell(header_width/2, 6, "", border=1, ln=1)
 
     pdf.ln(5)
 
-    # table header
-    col_widths = [25, 65, 65, 25, 25]
+    # tabel utama: lebar total = lebar halaman - margin
+    total_width = pdf.w - pdf.l_margin - pdf.r_margin
+    base_col_widths = [25, 65, 65, 25, 25]
+    scale = total_width / sum(base_col_widths)
+    col_widths = [w*scale for w in base_col_widths]
     headers = ["Akun Perkiraan","Nama Akun","Memo","Debit","Kredit"]
 
     pdf.set_font("Arial","B",9)
