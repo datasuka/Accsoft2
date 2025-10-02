@@ -34,7 +34,7 @@ def fmt_num(val):
         return "0"
 
 # --- generate voucher ---
-def buat_voucher(df, no_voucher, settings, pejabat):
+def buat_voucher(df, no_voucher, settings, pejabat, tinggi_ttd=25):
     pdf = FPDF("P", "mm", "A4")
     pdf.set_left_margin(15)
     pdf.set_right_margin(15)
@@ -51,18 +51,16 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     pdf.set_x(40)
     pdf.multi_cell(60, 5, settings.get("alamat",""), align="L")
 
-    # Header kanan (judul di dalam garis)
+    # Header kanan (judul dalam garis)
     judul = settings.get("judul_dokumen", "Jurnal Voucher")
     header_x = 120
+    pdf.set_xy(header_x, 10)
     pdf.set_font("Arial", "B", 12)
-
+    pdf.cell(80, 6, judul, align="R")
     pdf.set_draw_color(0,0,0)
     pdf.set_line_width(0.6)
-    pdf.line(header_x, 10, 200, 10)   # garis atas
-    pdf.line(header_x, 20, 200, 20)   # garis bawah
-
-    pdf.set_xy(header_x, 12)
-    pdf.cell(80, 6, judul, align="C")
+    pdf.line(header_x, 15, 200, 15)
+    pdf.line(header_x, 22, 200, 22)
 
     # Info voucher
     data = df[df["Nomor Voucher Jurnal"] == no_voucher]
@@ -157,16 +155,17 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     # --- TERBILANG (tanpa koma nol) ---
     terbilang = num2words(total_debit, lang='id')
     terbilang = " ".join([w.capitalize() for w in terbilang.split()])
-    if "Koma Nol" in terbilang:
-        terbilang = terbilang.replace("Koma Nol", "")
+    if "koma Nol" in terbilang:
+        terbilang = terbilang.replace("koma Nol", "")
     pdf.set_font("Arial", "I", 9)
     pdf.cell(total_width, 8, f"Terbilang : {terbilang} Rupiah", border=1, align="L")
     pdf.ln(10)
 
     # --- KETERANGAN & TTD ---
-    block_height = 40
+    block_height = tinggi_ttd
     ket_width = total_width * 0.4
     ttd_width = total_width * 0.6
+
     y_start = pdf.get_y()
 
     # Keterangan
@@ -181,33 +180,80 @@ def buat_voucher(df, no_voucher, settings, pejabat):
     y_dashed = y_start + block_height - 5
     pdf.dashed_line(pdf.l_margin + 2, y_dashed, pdf.l_margin + ket_width - 2, y_dashed, 1, 2)
 
-    # TTD
+    # TTD box
     pdf.set_xy(pdf.l_margin + ket_width + 5, y_start)
-    col_width = (ttd_width - 5) / len(pejabat)
+    if len(pejabat) > 0:
+        col_width = (ttd_width - 5) / len(pejabat)
 
-    pdf.set_font("Arial", "B", 9)
-    for jabatan, _ in pejabat:
-        pdf.cell(col_width, 8, jabatan if jabatan else "", border=1, align="C")
-    pdf.ln()
+        # Header jabatan
+        pdf.set_font("Arial", "B", 9)
+        for jabatan, _ in pejabat:
+            pdf.cell(col_width, 8, jabatan if jabatan else "", border=1, align="C")
+        pdf.ln()
 
-    pdf.set_x(pdf.l_margin + ket_width + 5)
-    for _ in pejabat:
-        pdf.cell(col_width, block_height-16, "", border=1, align="C")
-    pdf.ln()
+        # Kotak tanda tangan
+        pdf.set_x(pdf.l_margin + ket_width + 5)
+        for _ in pejabat:
+            pdf.cell(col_width, block_height-16, "", border=1, align="C")
+        pdf.ln()
 
-    pdf.set_x(pdf.l_margin + ket_width + 5)
-    pdf.set_font("Arial", "", 9)
-    for _, nama in pejabat:
-        pdf.cell(col_width, 8, nama if nama else "", border=1, align="C")
-    pdf.ln(15)
+        # Nama pejabat
+        pdf.set_x(pdf.l_margin + ket_width + 5)
+        pdf.set_font("Arial", "", 9)
+        for _, nama in pejabat:
+            pdf.cell(col_width, 8, nama if nama else "", border=1, align="C")
+        pdf.ln(15)
 
     buffer = BytesIO()
     pdf.output(buffer)
     return buffer
 
+
 # --- Streamlit ---
-st.set_page_config(page_title="Mini Akunting", layout="wide")
-st.title("📑 Mini Akunting - Voucher Jurnal / Kas / Bank")
+st.set_page_config(page_title="Bukti Transaksi Akuntansi Generator", layout="wide")
+
+# Judul & deskripsi
+st.title("📑 Bukti Transaksi Akuntansi Generator")
+st.markdown("#### By: @zavibis")
+
+st.markdown("""
+Aplikasi ini digunakan untuk **membuat bukti transaksi (voucher jurnal, kas, atau bank) dalam format PDF** 
+langsung dari file Excel yang berisi data jurnal.
+
+✅ Cocok untuk kebutuhan internal akunting, pembuatan bukti transaksi cepat, dan dokumentasi pembukuan.
+""")
+
+# Disclaimer
+st.info("""
+**Disclaimer:**
+- Aplikasi ini berjalan di sisi pengguna (client-side) menggunakan Streamlit Cloud.
+- **Data Anda tidak disimpan di server/web**, semua diproses lokal saat file diunggah.
+- Hasil PDF bisa langsung diunduh setelah diproses.
+""")
+
+# Petunjuk penggunaan
+st.markdown("""
+### 📌 Cara Penggunaan:
+1. **Siapkan file Excel** dengan format kolom berikut (wajib sesuai urutan):
+   - `Tanggal`  
+   - `Nomor Voucher Jurnal`  
+   - `No Akun`  
+   - `Akun`  
+   - `Deskripsi`  
+   - `Debet`  
+   - `Kredit`  
+   - `Departemen`  
+   - `Proyek`  
+   - `Subjek`  
+
+   👉 Pastikan setiap transaksi **harus balance** (total debit = total kredit).
+
+2. **Upload file Excel** ke aplikasi.
+3. Pilih mode cetak:  
+   - **Single Voucher** untuk cetak satu transaksi.  
+   - **Per Bulan** untuk cetak semua transaksi dalam satu bulan.  
+4. Klik **Cetak** lalu unduh hasil PDF atau ZIP.
+""")
 
 # Sidebar
 st.sidebar.header("⚙️ Pengaturan Perusahaan")
@@ -231,6 +277,8 @@ for i in range(1,4):
     if jabatan or nama:
         pejabat.append((jabatan, nama))
 
+tinggi_ttd = st.sidebar.slider("Tinggi kotak tanda tangan (mm)", 20, 60, 25)
+
 # Main content
 file = st.file_uploader("Upload Jurnal (Excel)", type=["xlsx","xls"])
 if file:
@@ -243,7 +291,7 @@ if file:
     if mode == "Single Voucher":
         no_voucher = st.selectbox("Pilih Nomor Voucher", df["Nomor Voucher Jurnal"].unique())
         if st.button("Cetak"):
-            pdf_file = buat_voucher(df, no_voucher, settings, pejabat)
+            pdf_file = buat_voucher(df, no_voucher, settings, pejabat, tinggi_ttd)
             st.download_button("⬇️ Download PDF", data=pdf_file, file_name=f"{no_voucher}.pdf")
 
     else:
@@ -255,7 +303,7 @@ if file:
             buffer_zip = BytesIO()
             with zipfile.ZipFile(buffer_zip, "w") as zf:
                 for v in df[df["Tanggal"].dt.month==bulan]["Nomor Voucher Jurnal"].unique():
-                    pdf_file = buat_voucher(df, v, settings, pejabat)
+                    pdf_file = buat_voucher(df, v, settings, pejabat, tinggi_ttd)
                     zf.writestr(f"{v}.pdf", pdf_file.getvalue())
             buffer_zip.seek(0)
             st.download_button("⬇️ Download ZIP", data=buffer_zip, file_name=f"voucher_{bulan}.zip", mime="application/zip")
