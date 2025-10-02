@@ -50,14 +50,20 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     pdf.set_x(40)
     pdf.multi_cell(80, 5, settings.get("alamat",""), align="L")
 
-    # Header kanan dalam kotak, selalu rata kanan
+    # Header kanan: judul + info kotak
     judul = "Jurnal Voucher" if jenis_doc=="Jurnal Umum" else ("Bukti Pengeluaran Kas/Bank" if jenis_doc=="Bukti Pengeluaran Kas/Bank" else "Bukti Penerimaan Kas/Bank")
-    header_width = 70
+    header_width = 90
     header_x = pdf.w - pdf.r_margin - header_width
+
+    # Judul di kanan atas
     pdf.set_xy(header_x, 10)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(header_width, 8, judul, border=1, align="C")
-    pdf.ln()
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(header_width, 10, judul, ln=1, align="R")
+
+    # Kotak info
+    label_w = 35
+    value_w = header_width - label_w
+    pdf.set_font("Arial", "", 10)
 
     data = df[df["Nomor Voucher Jurnal"] == no_voucher]
     try:
@@ -65,33 +71,33 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
     except:
         tgl = str(data.iloc[0]["Tanggal"])
 
-    pdf.set_font("Arial", "", 10)
+    # Nomor Voucher
     pdf.set_x(header_x)
-    pdf.cell(header_width/2, 6, "Nomor Voucher", border=1)
-    pdf.cell(header_width/2, 6, no_voucher, border=1, align="R")
-    pdf.ln()
+    pdf.cell(label_w, 7, "Nomor Voucher", border=1)
+    pdf.multi_cell(value_w, 7, no_voucher, border=1)
+
+    # Tanggal
+    pdf.set_x(header_x)
+    pdf.cell(label_w, 7, "Tanggal", border=1)
+    pdf.multi_cell(value_w, 7, tgl, border=1)
+
+    # Subjek/Penerima/Pemberi
+    if jenis_doc == "Jurnal Umum":
+        subjek_label = "Subjek"
+    elif jenis_doc == "Bukti Pengeluaran Kas/Bank":
+        subjek_label = "Penerima"
+    else:
+        subjek_label = "Pemberi"
 
     pdf.set_x(header_x)
-    pdf.cell(header_width/2, 6, "Tanggal", border=1)
-    pdf.cell(header_width/2, 6, tgl, border=1, align="R")
-    pdf.ln()
-
-    if jenis_doc == "Bukti Pengeluaran Kas/Bank":
-        pdf.set_x(header_x)
-        pdf.cell(header_width/2, 6, "Penerima", border=1)
-        pdf.cell(header_width/2, 6, "", border=1)
-        pdf.ln()
-    elif jenis_doc == "Bukti Penerimaan Kas/Bank":
-        pdf.set_x(header_x)
-        pdf.cell(header_width/2, 6, "Pemberi", border=1)
-        pdf.cell(header_width/2, 6, "", border=1)
-        pdf.ln()
+    pdf.cell(label_w, 7, subjek_label, border=1)
+    pdf.multi_cell(value_w, 7, "", border=1)
 
     pdf.ln(5)
 
-    # tabel utama: lebar total = lebar halaman - margin
+    # tabel utama
     total_width = pdf.w - pdf.l_margin - pdf.r_margin
-    base_col_widths = [25, 65, 65, 25, 25]
+    base_col_widths = [25, 60, 60, 35, 35]  # debit/kredit dilebarkan
     scale = total_width / sum(base_col_widths)
     col_widths = [w*scale for w in base_col_widths]
     headers = ["Akun Perkiraan","Nama Akun","Memo","Debit","Kredit"]
@@ -109,7 +115,6 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
         debit_val = row["Debet"]
         kredit_val = row["Kredit"]
 
-        # memo = departemen + proyek
         memo_text = ""
         if row.get("Departemen"):
             memo_text += f"- Departemen : {row['Departemen']}\n"
@@ -128,10 +133,10 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
             fmt_num(kredit_val)
         ]
 
-        # tinggi baris wrap
+        # wrap rows
         line_counts = []
         for i2, (val, w) in enumerate(zip(values, col_widths)):
-            if i2 in [3,4]:  # debit/kredit
+            if i2 in [3,4]:
                 line_counts.append(1)
             else:
                 lines = pdf.multi_cell(w, 6, val, split_only=True)
@@ -144,8 +149,7 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
         for i2, (val, w) in enumerate(zip(values, col_widths)):
             pdf.rect(x_start, y_start, w, row_height)
             pdf.set_xy(x_start, y_start)
-
-            if i2 in [3,4]:
+            if i2 in [3,4]:  # debit/kredit
                 pdf.cell(w, row_height, val, align="R")
             else:
                 pdf.multi_cell(w, 6, val, align="L")
@@ -154,7 +158,6 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
 
         total_debit += debit_val
         total_kredit += kredit_val
-
         if first_desc == "" and str(row.get("Deskripsi","")).strip():
             first_desc = str(row["Deskripsi"]).strip()
 
@@ -178,7 +181,7 @@ def buat_voucher(df, no_voucher, settings, jenis_doc):
         pdf.cell(sum(col_widths),8,f"Keterangan : {first_desc}",border=1,align="L")
         pdf.ln()
 
-    # tanda tangan table
+    # tanda tangan
     pdf.ln(10)
     pdf.set_font("Arial","",10)
     if jenis_doc == "Bukti Penerimaan Kas/Bank":
